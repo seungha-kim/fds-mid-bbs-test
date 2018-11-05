@@ -1,15 +1,13 @@
-import "@babel/polyfill"; // 이 라인을 지우지 말아주세요!
+import '@babel/polyfill'
 
 import axios from 'axios'
+import {withLoading} from './loading'
 
 const api = axios.create({
   baseURL: 'https://dull-room.glitch.me/'
 })
 
-// Axios Interceptor - 그때그때 다른 설정 사용하기
-// axios에는 매번 요청이 일어나기 직전에 **설정 객체를 가로채서** 원하는대로 편집할 수 있는 기능이 있습니다.
 api.interceptors.request.use(function (config) {
-  // localStorage에 token이 있으면 요청에 헤더 설정, 없으면 아무것도 하지 않음
   const token = localStorage.getItem('token')
   if (token) {
     config.headers = config.headers || {}
@@ -24,6 +22,7 @@ const templates = {
   postItem: document.querySelector('#post-item').content,
   postForm: document.querySelector('#post-form').content,
   postDetail: document.querySelector('#post-detail').content,
+  commentItem: document.querySelector('#comment-item').content,
 }
 
 const rootEl = document.querySelector('.root')
@@ -65,6 +64,16 @@ async function drawPostList() {
 
   const {data: postList} = await api.get('/posts')
 
+  const params = new URLSearchParams()
+
+  postList.forEach(postItem => {
+    params.append('id', postItem.userId)
+  })
+
+  const {data: userList} = await api.get('/users', {
+    params
+  })
+
   postList.forEach(postItem => {
     // 1. 템플릿 복사
     const frag = document.importNode(templates.postItem, true)
@@ -80,8 +89,8 @@ async function drawPostList() {
       drawPostDetail(postItem.id)
     })
 
-    // TODO
-    authorEl.textContent = 'TODO'
+    const user = userList.find(user => user.id === postItem.userId)
+    authorEl.textContent = user ? user.username : '?'
 
     // 3. 문서에 삽입
     listEl.appendChild(frag)
@@ -102,25 +111,69 @@ async function drawPostList() {
 }
 
 async function drawPostDetail(postId) {
-  // 1. 템플릿 복사
+  // 템플릿 복사
   const frag = document.importNode(templates.postDetail, true)
 
-  // 2. 내용 채우기
+  // 요소 선택
   const titleEl = frag.querySelector('.title')
   const authorEl = frag.querySelector('.author')
   const bodyEl = frag.querySelector('.body')
   const deleteEl = frag.querySelector('.delete')
   const updateEl = frag.querySelector('.update')
   const backEl = frag.querySelector('.back')
+  const commentListEl = frag.querySelector('.comment-list')
+  const commentFormEl = frag.querySelector('.comment-form')
 
-  const {data: {title, body}} = await api.get(`/posts/${postId}`)
+  // 필요한 데이터 불러오기
+  const [
+    {data: {title, body, userId}},
+    {data: commentList}
+  ] = await Promise.all([
+    api.get(`/posts/${postId}`),
+    api.get(`/posts/${postId}/comments`)
+  ])
 
+  const userIds = new Set(commentList.map(item => item.userId))
+  userIds.add(userId)
+
+  const params = new URLSearchParams()
+  for (const userId of userIds) {
+    params.append('id', userId)
+  }
+
+  const {data: userList} = await api.get('/users', {
+    params
+  })
+
+  // 내용 채우기
   titleEl.textContent = title
   bodyEl.textContent = body
 
-  // TODO
-  authorEl.textContent = 'TODO'
+  const user = userList.find(item => item.id === userId)
+  authorEl.textContent = user ? user.username : '?'
+  commentList.forEach(commentItem => {
+    const frag = document.importNode(templates.commentItem, true)
 
+    const authorEl = frag.querySelector('.author')
+    const bodyEl = frag.querySelector('.body')
+    const deleteEl = frag.querySelector('.delete')
+    if (commentItem.userId === userId) {
+      deleteEl.classList.remove('hidden')
+      deleteEl.addEventListener('click', async e => {
+        await api.delete(`/comments/${commentItem.id}`)
+        drawPostDetail(postId)
+      })
+    }
+
+    const user = userList.find(item => item.id === commentItem.userId)
+
+    authorEl.textContent = user ? user.username : '?'
+    bodyEl.textContent = commentItem.body
+
+    commentListEl.appendChild(frag)
+  })
+
+  // 이벤트 리스너 등록하기
   backEl.addEventListener('click', e => {
     drawPostList()
   })
@@ -134,7 +187,16 @@ async function drawPostDetail(postId) {
     drawPostList()
   })
 
-  // 3. 문서에 삽입
+  commentFormEl.addEventListener('submit', async e => {
+    e.preventDefault()
+    const body = e.target.elements.body.value
+    await api.post(`/posts/${postId}/comments`, {
+      body
+    })
+    drawPostDetail(postId)
+  })
+
+  // 문서에 삽입
   rootEl.textContent = ''
   rootEl.appendChild(frag)
 }
@@ -203,6 +265,14 @@ async function drawEditPostForm(postId) {
   rootEl.appendChild(frag)
 }
 
+// 로딩 인디케이터 적용
+drawEditPostForm = withLoading(drawEditPostForm)
+drawLoginForm = withLoading(drawLoginForm)
+drawNewPostForm = withLoading(drawNewPostForm)
+drawPostDetail = withLoading(drawPostDetail)
+drawPostList = withLoading(drawPostList)
+
+// 페이지 로드 시 그릴 화면 설정
 if (localStorage.getItem('token')) {
   drawPostList()
 } else {

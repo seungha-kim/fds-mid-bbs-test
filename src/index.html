@@ -73,6 +73,19 @@
       <p class="author-wrap">작성자: <span class="author"></span></p>
       <p class="body"></p>
     </div>
+    <form class="comment-form">
+      <input class="body" type="text" name="body">
+      <button>전송</button>
+    </form>
+    <ul class="comment-list"></ul>
+  </template>
+
+  <template id="comment-item">
+    <li class="comment-item">
+      <span class="author"></span>:
+      <span class="body"></span>
+      <button class="delete hidden">삭제</button>
+    </li>
   </template>
 
   <div class="root"></div>
