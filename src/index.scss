@@ -3,3 +3,9 @@ $main-color: skyblue;
 body {
   background-color: $main-color;
 }
+
+.post-detail {
+  .body {
+    white-space: pre;
+  }
+}
